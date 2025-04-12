@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # PaperAutoSummarizer
 AI-Driven Summarizes for the Latest Research on ArXiv
 =======
@@ -62,4 +61,3 @@ python src/main.py
 ## 停止方法
 
 Ctrl+C でアプリケーションを安全に停止できます。
->>>>>>> master
