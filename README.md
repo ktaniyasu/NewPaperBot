@@ -1,9 +1,7 @@
 # PaperAutoSummarizer
-AI-Driven Summarizes for the Latest Research on ArXiv
-=======
-# Arxiv Analyzer
 
 arXivから最新の論文情報を取得し、指定されたカテゴリの論文を要約してDiscordに通知するツールです。
+
 
 ## 機能
 
@@ -18,46 +16,43 @@ arXivから最新の論文情報を取得し、指定されたカテゴリの論
 ## 環境構築
 
 1. リポジトリをクローンします。
+
    ```bash
-   git clone <リポジトリURL>
+   git clone https://github.com/ktaniyasu/PaperAutoSummarizer
    cd arxiv_analyzer
    ```
-
 2. 必要なライブラリをインストールします。
+
    ```bash
    pip install -r requirements.txt
    ```
+3. `.env`ファイルを `.env.template`から作成し、以下の環境変数を設定します。
 
-3. `.env`ファイルを作成し、以下の環境変数を設定します。
    ```env
-   # Discord Bot Token
-   DISCORD_BOT_TOKEN="YOUR_DISCORD_BOT_TOKEN"
+   # API Keys
+   GOOGLE_API_KEY=your_google_api_key_here //Gemini API KEY
+   DISCORD_BOT_TOKEN=your_discord_bot_token_here //Discord Botのトークン
 
-   # OpenAI API Key (or other LLM provider key)
-   OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+   # Discord Settings
+   DISCORD_GUILD_ID=your_guild_id_here //DiscordのサーバーID
+   DISCORD_CHANNEL_ID=your_channel_id_here //内容を投稿するチャンネルID
 
-   # Target Discord channels and arXiv categories (JSON format)
-   # 例:
-   # TARGET_CHANNELS='[{"channel_id": "123456789012345678", "category": "cs.AI"}, {"channel_id": "987654321098765432", "category": "cs.CL"}]'
-   TARGET_CHANNELS='YOUR_TARGET_CHANNELS_JSON'
-
-   # Optional: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-   # LOG_LEVEL="INFO"
+   # ArXiv API Settings
+   ARXIV_CATEGORIES=cs.AI,cs.LG,cs.CL //ArXivから取得したいカテゴリ
    ```
-   - `DISCORD_BOT_TOKEN`: Discordボットのトークン。
-   - `OPENAI_API_KEY`: 論文要約に使用するLLMのAPIキー。
-   - `TARGET_CHANNELS`: 通知先のDiscordチャンネルIDと対象のarXivカテゴリをJSON形式で指定します。
 
 ## 実行方法
 
 以下のコマンドでアプリケーションを起動します。
 
 ```bash
-python src/main.py
+python -m src.main
 ```
 
 アプリケーションは起動後、`TARGET_CHANNELS`で指定されたカテゴリの論文を定期的にチェックし、新しい論文が見つかると要約して該当するDiscordチャンネルに通知します。
 
+現在の設定では平日のみ作動し、
+
 ## 停止方法
 
-Ctrl+C でアプリケーションを安全に停止できます。
+バックグラウンドで24時間毎に実行する設定になっているので、ctrl+cで停止させてください。

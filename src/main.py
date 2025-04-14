@@ -48,6 +48,15 @@ class ArxivAnalyzer:
         """定期的に新しい論文をチェックする"""
         while self.running:
             log.info("Starting periodic paper check cycle...")
+            
+            # 現在の曜日を確認（月曜が0、日曜が6）
+            current_weekday = datetime.datetime.now().weekday()
+            if current_weekday >= 5:  # 土曜日か日曜日の場合
+                wait_time = 24 * 60 * 60  # 24時間待機
+                log.info(f"Weekend detected. Skipping paper check. Next check in {wait_time / 3600:.1f} hours...")
+                await asyncio.sleep(wait_time)
+                continue
+                
             log.info(f"Processing {len(settings.target_channels)} categories...")
             processed_dates = set() # Track dates for which headers have been sent per channel
             
