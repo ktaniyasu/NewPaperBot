@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 from typing import Optional, Tuple
 import re
+import datetime
 from ..models.paper import Paper, AnalysisResult
 from ..utils.config import settings
 from ..utils.logger import log
@@ -19,14 +20,30 @@ class PaperAnalyzer:
                 "max_output_tokens": settings.LLM_MAX_TOKENS,
             }
         )
+        self.MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 
     async def analyze_paper(self, paper: Paper) -> Paper:
         """論文を解析する"""
+        pdf_path = None
         try:
             # PDFのダウンロード
             pdf_path = await self._download_pdf(paper.metadata.pdf_url)
             if not pdf_path:
                 raise ValueError("Failed to download PDF")
+
+            # ファイルサイズチェック
+            pdf_file_size = Path(pdf_path).stat().st_size
+            if pdf_file_size > self.MAX_PDF_SIZE_BYTES:
+                log.warning(f"Skipping paper {paper.metadata.arxiv_id} due to large file size: {pdf_file_size / (1024*1024):.2f} MB (Limit: {self.MAX_PDF_SIZE_BYTES / (1024*1024)} MB)")
+                paper.analysis = AnalysisResult(
+                    summary="論文ファイル>50MBのためスキップ",
+                    novelty="論文ファイル>50MBのためスキップ",
+                    methodology="論文ファイル>50MBのためスキップ",
+                    results="論文ファイル>50MBのためスキップ",
+                    future_work="論文ファイル>50MBのためスキップ"
+                )
+                paper.error_log = f"論文ファイル>50MBのためスキップ"
+                return paper
 
             # プロンプトの構築とPDFの読み込み
             prompt = self._build_prompt(paper.metadata.title, paper.metadata.abstract)
@@ -34,17 +51,25 @@ class PaperAnalyzer:
             # Geminiによる解析
             response = await self._generate_analysis(prompt, pdf_path)
 
-            # 一時ファイルの削除
-            Path(pdf_path).unlink()
+            try:
+                # LLMの生の応答をファイルに保存
+                log_dir = Path("logs/llm_raw_responses")
+                log_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                safe_arxiv_id = paper.metadata.arxiv_id.replace('/', '_')
+                log_filename = log_dir / f"{safe_arxiv_id}_{timestamp}.txt"
+                with open(log_filename, "w", encoding="utf-8") as f:
+                    f.write(response)
+                log.info(f"Saved raw LLM response for {paper.metadata.arxiv_id} to {log_filename}")
+            except Exception as log_save_error:
+                log.error(f"Failed to save raw LLM response for {paper.metadata.arxiv_id}: {str(log_save_error)}")
 
             try:
                 # 解析結果をパースしてPaperオブジェクトを更新
                 paper.analysis = self._parse_response(response)
             except Exception as parse_error:
-                # パース失敗時にはLLMの生の出力を保存
                 log.error(f"Failed to parse LLM response: {str(parse_error)}")
                 paper.error_log = f"Parse error: {str(parse_error)}\n\nRaw LLM response:\n{response}"
-                # デフォルトの解析失敗結果を設定
                 paper.analysis = AnalysisResult(
                     summary="解析失敗",
                     novelty="解析失敗",
@@ -58,7 +83,20 @@ class PaperAnalyzer:
         except Exception as e:
             log.error(f"Error analyzing paper {paper.metadata.arxiv_id}: {str(e)}")
             paper.error_log = str(e)
+            paper.analysis = AnalysisResult(
+                summary="解析エラー発生",
+                novelty="解析エラー発生",
+                methodology="解析エラー発生",
+                results="解析エラー発生",
+                future_work="解析エラー発生"
+            )
             return paper
+        finally:
+            if pdf_path and Path(pdf_path).exists():
+                try:
+                    Path(pdf_path).unlink()
+                except Exception as unlink_error:
+                    log.error(f"Error deleting temporary PDF file {pdf_path}: {str(unlink_error)}")
 
     async def _download_pdf(self, url: str) -> Optional[str]:
         """PDFをダウンロードして一時ファイルとして保存する"""
@@ -67,7 +105,6 @@ class PaperAnalyzer:
                 response = await client.get(url)
                 response.raise_for_status()
 
-                # 一時ファイルにPDFを保存
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
                     tmp_file.write(response.content)
                     return tmp_file.name
@@ -94,17 +131,18 @@ class PaperAnalyzer:
                     5. Future Work: 今後の課題や展望
                     
                     上記【出力フォーマット】を必ずこの形式で出力してください。
-
+                    Jsonによる出力は禁止されています。
                     """
 
     async def _generate_analysis(self, prompt: str, pdf_path: str) -> str:
         """Geminiを使用して解析を実行する"""
         try:
-            # PDFファイルを読み込む
             with open(pdf_path, 'rb') as f:
                 pdf_data = f.read()
 
-            # PDFをmime_typeとともにモデルに渡す
+            pdf_size_kb = len(pdf_data) / 1024
+            log.debug(f"Sending request to Gemini. Prompt length: {len(prompt)}, PDF path: {pdf_path}, PDF size: {pdf_size_kb:.2f} KB")
+
             response = await self.model.generate_content_async([
                 prompt,
                 {
@@ -113,7 +151,6 @@ class PaperAnalyzer:
                 }
             ])
 
-            # レスポンスの検証
             if not response.candidates:
                 raise ValueError("No response received from Gemini")
             
@@ -128,10 +165,8 @@ class PaperAnalyzer:
 
     def _parse_response(self, response: str) -> AnalysisResult:
         try:            
-            # 応答テキストを各セクションに分割
             sections = response.split('\n\n')
             
-            # デフォルト値を設定
             analysis = {
                 'summary': '解析失敗',
                 'novelty': '解析失敗',
@@ -140,7 +175,6 @@ class PaperAnalyzer:
                 'future_work': '解析失敗'
             }
             
-            # 各セクションを解析
             current_section = None
             current_text = []
             
@@ -149,17 +183,13 @@ class PaperAnalyzer:
                 if not section_text:
                     continue
                 
-                # Remove leading markdown-like formatting (**, *, #, 1. etc.) and surrounding emphasis
                 cleaned_text = re.sub(r"^\s*[\*#]+\s*|\d+\.\s*", "", section_text).strip()
-                cleaned_text = re.sub(r"^\*+|\*+$", "", cleaned_text).strip() # Handle asterisks
-                cleaned_text = re.sub(r"^_|_$", "", cleaned_text).strip() # Handle underscores
+                cleaned_text = re.sub(r"^\*+|\*+$", "", cleaned_text).strip()
+                cleaned_text = re.sub(r"^_|_$", "", cleaned_text).strip()
 
-                # セクションヘッダーの検出
                 try:
-                    # Use cleaned_text for header checking
                     if '要約:' in cleaned_text or '要約：' in cleaned_text:
                         current_section = 'summary'
-                        # Extract text after the header from the original section_text
                         split_text = section_text.replace('：', ':').split(':', 1)
                         current_text = [split_text[1].strip()] if len(split_text) > 1 else []
                     elif '新規性:' in cleaned_text or '新規性：' in cleaned_text:
@@ -178,11 +208,9 @@ class PaperAnalyzer:
                         current_section = 'future_work'
                         split_text = section_text.replace('：', ':').split(':', 1)
                         current_text = [split_text[1].strip()] if len(split_text) > 1 else []
-                    # Append the original, uncleaned text if it's part of a section
                     elif current_section:
-                         current_text.append(section_text) # Append original text
+                         current_text.append(section_text)
 
-                    # Assign the joined original text
                     if current_section and current_text:
                         analysis[current_section] = ' '.join(current_text)
 
@@ -190,7 +218,6 @@ class PaperAnalyzer:
                     log.error(f"Error parsing section '{section_text}': {str(e)}")
                     continue
             
-            # 解析結果の確認
             failed_sections = [section for section in analysis if analysis[section] == '解析失敗']
             if failed_sections:
                 log.debug(f"Failed to parse sections: {failed_sections}")
