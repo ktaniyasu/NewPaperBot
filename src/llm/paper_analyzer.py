@@ -5,6 +5,7 @@ import tempfile
 from typing import Optional, Tuple
 import re
 import datetime
+import asyncio
 from ..models.paper import Paper, AnalysisResult
 from ..utils.config import settings
 from ..utils.logger import log
@@ -34,15 +35,16 @@ class PaperAnalyzer:
             # ファイルサイズチェック
             pdf_file_size = Path(pdf_path).stat().st_size
             if pdf_file_size > self.MAX_PDF_SIZE_BYTES:
-                log.warning(f"Skipping paper {paper.metadata.arxiv_id} due to large file size: {pdf_file_size / (1024*1024):.2f} MB (Limit: {self.MAX_PDF_SIZE_BYTES / (1024*1024)} MB)")
+                # 50MB超の場合はsummaryのみ翻訳して返す
+                translated_summary = await self._translate_text(paper.metadata.abstract)
                 paper.analysis = AnalysisResult(
-                    summary="論文ファイル>50MBのためスキップ",
-                    novelty="論文ファイル>50MBのためスキップ",
-                    methodology="論文ファイル>50MBのためスキップ",
-                    results="論文ファイル>50MBのためスキップ",
-                    future_work="論文ファイル>50MBのためスキップ"
+                    summary=translated_summary,
+                    novelty="PDFサイズが50MBを超えているため解析不可",
+                    methodology="PDFサイズが50MBを超えているため解析不可",
+                    results="PDFサイズが50MBを超えているため解析不可",
+                    future_work="PDFサイズが50MBを超えているため解析不可"
                 )
-                paper.error_log = f"論文ファイル>50MBのためスキップ"
+                paper.error_log = f"PDFサイズが50MBを超えているため解析不可"
                 return paper
 
             # プロンプトの構築とPDFの読み込み
@@ -143,13 +145,17 @@ class PaperAnalyzer:
             pdf_size_kb = len(pdf_data) / 1024
             log.debug(f"Sending request to Gemini. Prompt length: {len(prompt)}, PDF path: {pdf_path}, PDF size: {pdf_size_kb:.2f} KB")
 
-            response = await self.model.generate_content_async([
-                prompt,
-                {
-                    "mime_type": "application/pdf",
-                    "data": pdf_data
-                }
-            ])
+            # Geminiリクエストにタイムアウトを設定
+            response = await asyncio.wait_for(
+                self.model.generate_content_async([
+                    prompt,
+                    {
+                        "mime_type": "application/pdf",
+                        "data": pdf_data
+                    }
+                ]),
+                timeout=settings.LLM_REQUEST_TIMEOUT
+            )
 
             if not response.candidates:
                 raise ValueError("No response received from Gemini")
@@ -231,3 +237,15 @@ class PaperAnalyzer:
         except Exception as e:
             log.error(f"Error in _parse_response: {str(e)}")
             raise
+
+    async def _translate_text(self, text: str) -> str:
+        """LLMで英文を日本語訳する"""
+        try:
+            prompt = f"次の英文を日本語に翻訳してください。\n\n{text} 翻訳文そのもの以外の出力は禁止されています。"
+            response = await self.model.generate_content_async([prompt])
+            if not response.candidates or not response.candidates[0].content.parts:
+                raise ValueError("No response from LLM for translation")
+            return response.candidates[0].content.parts[0].text.strip()
+        except Exception as e:
+            log.error(f"Error translating text: {str(e)}")
+            return "翻訳エラー発生"

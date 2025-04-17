@@ -44,8 +44,8 @@ def setup_logger():
     for handler in config["handlers"]:
         logger.add(**handler)
 
-    # エラーハンドラを追加
-    logger.add(error_handler, level="ERROR")
+    # クリティカルなエラーのみプログラム停止用ハンドラとして登録
+    logger.add(error_handler, level="CRITICAL")
 
     return logger
 
