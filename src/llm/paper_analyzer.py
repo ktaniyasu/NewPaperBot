@@ -5,7 +5,6 @@ import tempfile
 from typing import Optional, Tuple
 import re
 import datetime
-import asyncio
 from ..models.paper import Paper, AnalysisResult
 from ..utils.config import settings
 from ..utils.logger import log
@@ -132,7 +131,7 @@ class PaperAnalyzer:
                     4. 結果: 主要な実験結果や成果（図表の内容も含めた具体的な数値や比較結果）
                     5. Future Work: 今後の課題や展望
                     
-                    上記【出力フォーマット】を必ずこの形式で出力してください。
+                    上記【出力フォーマット】以外の出力は禁止されています。
                     Jsonによる出力は禁止されています。
                     """
 
@@ -145,17 +144,13 @@ class PaperAnalyzer:
             pdf_size_kb = len(pdf_data) / 1024
             log.debug(f"Sending request to Gemini. Prompt length: {len(prompt)}, PDF path: {pdf_path}, PDF size: {pdf_size_kb:.2f} KB")
 
-            # Geminiリクエストにタイムアウトを設定
-            response = await asyncio.wait_for(
-                self.model.generate_content_async([
-                    prompt,
-                    {
-                        "mime_type": "application/pdf",
-                        "data": pdf_data
-                    }
-                ]),
-                timeout=settings.LLM_REQUEST_TIMEOUT
-            )
+            response = await self.model.generate_content_async([
+                prompt,
+                {
+                    "mime_type": "application/pdf",
+                    "data": pdf_data
+                }
+            ])
 
             if not response.candidates:
                 raise ValueError("No response received from Gemini")

@@ -44,6 +44,17 @@ class ArxivAnalyzer:
             log.error(f"Error starting service: {str(e)}")
             await self.shutdown()
 
+    async def sleep_until_next_weekday_830(self):
+        now = datetime.datetime.now()
+        next_run = now.replace(hour=8, minute=30, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += datetime.timedelta(days=1)
+        while next_run.weekday() >= 5:
+            next_run += datetime.timedelta(days=1)
+        wait_seconds = (next_run - now).total_seconds()
+        log.info(f"次回の実行まで {wait_seconds/3600:.2f} 時間待機します（実行予定: {next_run}）")
+        await asyncio.sleep(wait_seconds)
+
     async def periodic_paper_check(self):
         """定期的に新しい論文をチェックする"""
         while self.running:
@@ -52,9 +63,8 @@ class ArxivAnalyzer:
             # 現在の曜日を確認（月曜が0、日曜が6）
             current_weekday = datetime.datetime.now().weekday()
             if current_weekday >= 5:  # 土曜日か日曜日の場合
-                wait_time = 24 * 60 * 60  # 24時間待機
-                log.info(f"Weekend detected. Skipping paper check. Next check in {wait_time / 3600:.1f} hours...")
-                await asyncio.sleep(wait_time)
+                log.info(f"Weekend detected. Skipping paper check.")
+                await self.sleep_until_next_weekday_830()
                 continue
                 
             log.info(f"Processing {len(settings.target_channels)} categories...")
@@ -102,10 +112,8 @@ class ArxivAnalyzer:
                     continue # Continue with the next category
                 log.info(f"Finished checking category '{category}'")
 
-            # 次の実行まで待機（24時間）
-            wait_time = 24 * 60 * 60
-            log.info(f"Periodic check cycle finished. Waiting for {wait_time / 3600:.1f} hours...")
-            await asyncio.sleep(wait_time)
+            log.info("Periodic check cycle finished.")
+            await self.sleep_until_next_weekday_830()
 
     def handle_shutdown(self, signum, frame):
         """シャットダウンハンドラ"""

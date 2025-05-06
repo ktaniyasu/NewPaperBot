@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     LOG_FILE: Path = Path("logs/arxiv_analyzer.log")
 
     # LLM Settings
-    LLM_MODEL: str = "gemini-2.5-pro-exp-03-25"
+    LLM_PROVIDER: str = "gemini"
+    LLM_MODEL: Optional[str] = None  # Optional custom model name
+    # Token budget for Gemini thinking phase
+    LLM_THINKING_BUDGET: int = 1024
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 2048
     LLM_REQUEST_TIMEOUT: int = 60
@@ -48,6 +51,17 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
+        # Override LLM_MODEL based on provider
+        provider = self.LLM_PROVIDER.lower()
+        if provider == "gemini":
+            # Use custom model if set, otherwise default to 2.5 flash preview
+            if not self.LLM_MODEL:
+                self.LLM_MODEL = "gemini-2.5-flash-preview-04-17"
+        elif provider == "openai":
+            self.LLM_MODEL = "o4-mini"
+        else:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {self.LLM_PROVIDER}")
+
         # Load ArXiv category and Discord channel pairs dynamically
         i = 1
         self.target_channels = []  # Reset the list to ensure we start fresh
