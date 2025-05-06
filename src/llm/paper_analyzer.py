@@ -13,6 +13,7 @@ class PaperAnalyzer:
     def __init__(self):
         """論文解析クラスの初期化"""
         genai.configure(api_key=settings.GOOGLE_API_KEY)
+        log.info(f"LLMモデル: {settings.LLM_MODEL}, 温度: {settings.LLM_TEMPERATURE}, 最大トークン数: {settings.LLM_MAX_TOKENS}, タイムアウト: {settings.LLM_REQUEST_TIMEOUT}")
         self.model = genai.GenerativeModel(
             model_name=settings.LLM_MODEL,
             generation_config={

@@ -58,6 +58,15 @@ class ArxivAnalyzer:
     async def periodic_paper_check(self):
         """定期的に新しい論文をチェックする"""
         while self.running:
+            if getattr(settings, "DEBUG_RUN_IMMEDIATELY", False):
+                log.info("DEBUG_RUN_IMMEDIATELYがTrueのため即時実行します")
+            else:
+                now = datetime.datetime.now()
+                # 平日かつ8:30以外なら待機
+                if now.weekday() < 5 and (now.hour != 8 or now.minute != 30):
+                    log.info("まだ8:30ではないため待機します")
+                    await self.sleep_until_next_weekday_830()
+                    continue
             log.info("Starting periodic paper check cycle...")
             
             # 現在の曜日を確認（月曜が0、日曜が6）

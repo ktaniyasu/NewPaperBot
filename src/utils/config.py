@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2048
     LLM_REQUEST_TIMEOUT: int = 60
 
+    # Debug Settings
+    DEBUG_RUN_IMMEDIATELY: bool = False
+
     # Target channels for ArXiv categories
     target_channels: List[Dict[str, str]] = []
 
