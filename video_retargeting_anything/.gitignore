@@ -1,0 +1,32 @@
+# build artifacts (CMake/make)
+build/
+
+# OS・エディタ固有
+.DS_Store
+*.swp
+
+# バイナリ・実行ファイル
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.out
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+
+# ログや一時ファイル
+*.log
+*.tmp
+
+# モデルや大容量データ（例示）
+*.zip
+*.mov
+*.mp4
+*.avi
+*.mkv
+
+# 機密ファイル（例示、必要に応じて）
+.env
