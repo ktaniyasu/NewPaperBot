@@ -27,6 +27,15 @@ class ArxivAnalyzer:
             async def wait_for_bot_ready():
                 await self.bot.wait_until_ready()
                 log.info("Discord Bot is ready.")
+
+                # サービス起動時にまず8:30かどうか確認し、該当しない場合は次の平日 8:30 まで待機
+                if not getattr(settings, "DEBUG_RUN_IMMEDIATELY", False):
+                    now = datetime.datetime.now()
+                    is_target_time = (now.weekday() < 5) and (now.hour == 8 and now.minute == 30)
+                    if not is_target_time:
+                        log.info("サービス起動時に8:30ではないため、次の実行時間まで待機します")
+                        await self.sleep_until_next_weekday_830()
+
                 # ボット準備完了後に定期チェックタスクを開始
                 self.periodic_task = asyncio.create_task(self.periodic_paper_check())
             
