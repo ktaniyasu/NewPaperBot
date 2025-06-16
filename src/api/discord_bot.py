@@ -116,6 +116,10 @@ class ArxivBot(commands.Bot):
             embed.add_field(name="**🔍 手法**", value=truncate_text(methodology) + divider, inline=False)
             embed.add_field(name="**📊 結果**", value=truncate_text(results) + divider, inline=False)
             embed.add_field(name="**🔮 Future Work**", value=truncate_text(future_work), inline=False)
+            # 研究テーマ Tips を追加
+            if analysis.research_themes:
+                tips_text = "\n".join(f"{i+1}. {theme}" for i, theme in enumerate(analysis.research_themes))
+                embed.add_field(name="**🧩 研究テーマのTips**", value=truncate_text(tips_text), inline=False)
 
         embed.set_footer(text=f"Published: {metadata.published_date.strftime('%Y-%m-%d')}")
         

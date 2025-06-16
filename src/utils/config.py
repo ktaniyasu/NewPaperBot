@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Token budget for Gemini thinking phase
     LLM_THINKING_BUDGET: int = 1024
     LLM_TEMPERATURE: float = 0.3
-    LLM_MAX_TOKENS: int = 2048
+    LLM_MAX_TOKENS: int = 8192
     LLM_REQUEST_TIMEOUT: int = 60
 
     # Debug Settings
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
         if provider == "gemini":
             # Use custom model if set, otherwise default to 2.5 flash preview
             if not self.LLM_MODEL:
-                self.LLM_MODEL = "gemini-2.5-flash-preview-04-17"
+                self.LLM_MODEL = "models/gemini-2.5-flash-preview-05-20"
         elif provider == "openai":
             self.LLM_MODEL = "o4-mini"
         else:
