@@ -2,9 +2,19 @@
 
 arXivから最新の論文情報を取得し、指定されたカテゴリの論文を要約してDiscordに通知するツールです。
 
----
+**ver 1.1**
+
+* LLMをgemini-2.5-flashに変更
+* 箇条書きから文章の形態に変更**,**
+* 研究テーマのTipsとして、考えうる新規研究のリストを作成
+
+**ver 1.2**
+
+* LLMをGLM-4.5-Airに変更
+* RAGを用いて内容を取得する形に変更
 
 ## 目次
+
 - 概要
 - 主な機能
 - クイックスタート
@@ -21,6 +31,7 @@ arXivから最新の論文情報を取得し、指定されたカテゴリの論
 ---
 
 ## 概要
+
 - 対象: arXiv 論文の定期監視・要約・Discord通知
 - 実行形態:
   - スケジューラ＋Discord Bot（平日8:30実行。即時起動フラグあり）
@@ -32,11 +43,12 @@ arXivから最新の論文情報を取得し、指定されたカテゴリの論
 ---
 
 ## 主な機能
+
 - ar5iv HTML 取り込みによる高速テキスト抽出（有効時）。失敗/無効時は PDF にフォールバック
 - arXivカテゴリ単位の新着取得とバッチ送信
 - PDF ダウンロードと安全な処理（サイズに応じた圧縮フォールバック）
 - LLM 構造化出力（summary/novelty/methodology/results/future_work/research_themes）
- - LLM 出力キーの英語スキーマへの自動正規化と厳密 JSON 指示（English keys only）
+- LLM 出力キーの英語スキーマへの自動正規化と厳密 JSON 指示（English keys only）
 - Files API 失敗時の Text + RAG 自動フォールバック
 - RAG（FAISS + Qwen Embedding）での Top-K 選択、貪欲パッキング、トップ1フォールバック
 - Discord Embed の共通フォーマットとメトリクス収集
@@ -45,7 +57,9 @@ arXivから最新の論文情報を取得し、指定されたカテゴリの論
 ---
 
 ## クイックスタート
+
 1) 取得とセットアップ
+
 ```bash
 git clone <YOUR_REPO_URL>
 cd arxiv_analyzer
@@ -56,13 +70,14 @@ pre-commit install  # 任意
 ```
 
 2) .env を作成（下記「環境変数」を参照）
-
 3) 実行
+
 ```bash
 python -m src.main
 ```
 
 補助スクリプト（任意）:
+
 ```bash
 python list_google_models.py  # 利用可能な Gemini モデル一覧の補助
 ```
@@ -70,6 +85,7 @@ python list_google_models.py  # 利用可能な Gemini モデル一覧の補助
 ---
 
 ## 環境変数（.env）
+
 必須と推奨をまとめます（値はダミー）。
 
 ```ini
@@ -127,26 +143,33 @@ LOG_FILE=logs/arxiv_analyzer.log
 ```
 
 備考:
+
 - OpenRouter 利用時は `LLM_PROVIDER=openrouter` にし、`OPENROUTER_API_KEY` と `LLM_MODEL` を必ず設定。
 - Gemini 利用時は `GOOGLE_API_KEY` が必須。`LLM_MODEL` 未指定でも既定が自動補完（`models/` プレフィックス）。
 
 ---
 
 ## 実行方法
+
 スケジューラ＋Discord Bot（`DISCORD_BOT_TOKEN` 設定時）:
+
 ```bash
 python -m src.main
 ```
+
 - 平日8:30に `src/scheduler/runner.py` が `src/services/pipeline.py` を駆動
 - カテゴリごとに新着を取得→解析→Discordへ送信
 
 ヘッドレス（Discordなし）:
+
 - `DISCORD_BOT_TOKEN` 未設定でも同コマンドで動作（ログ出力のみ）
 
 Discord Bot コマンド（任意）:
+
 - `!help` / `!status` / `!categories`
 
 複数カテゴリの指定例:
+
 ```markdown
 ARXIV_CATEGORY_1="astro-ph.CO"
 DISCORD_CHANNEL_ID_1="123456789012345678"
@@ -158,16 +181,19 @@ DISCORD_CHANNEL_ID_2="123456789012345678"
 ---
 
 ## 単発解析（CLI）
+
 ```bash
 python -m src.cli.analyze_one --arxiv-id 2401.00001 --output result.json
 # または PDF 指定
 python -m src.cli.analyze_one --pdf-url "https://arxiv.org/pdf/2401.00001.pdf" --output result.json
 ```
+
 - 最小限必要な環境変数は `GOOGLE_API_KEY`（既定は Gemini 使用）
 
 ---
 
 ## RAG 評価（オフライン CLI）
+
 RAG パラメータ（類似度しきい値、Top-K、貪欲パッキング）を掃引し、メトリクスを CSV 出力します。
 
 ```bash
@@ -177,9 +203,11 @@ python -m src.cli.evaluate_rag --pdf-dir <PDF_DIR> \
 ```
 
 CSV 列（例）:
+
 ```
 pdf_path,n_chunks_total,min_similarity,top_k,used_top_k,filtered_count,selected_count,selected_chars,avg_score,build_ms,search_ms,fallback_used
 ```
+
 - used_top_k: 段階縮小後に実使用された Top-K
 - filtered_count: しきい値フィルタ後の候補数
 - fallback_used: 最上位1件フォールバック使用時は 1
@@ -187,6 +215,7 @@ pdf_path,n_chunks_total,min_similarity,top_k,used_top_k,filtered_count,selected_
 ---
 
 ## アーキテクチャ概要
+
 ```mermaid
 flowchart TD
     SCHED[SchedulerRunner\n平日8:30 or 即時] --> PIPE[Pipeline\n取得→解析→通知]
@@ -204,6 +233,7 @@ flowchart TD
 ```
 
 主なモジュール:
+
 - `src/main.py`: エントリーポイント
 - `src/services/pipeline.py`: 取得→解析→通知の制御
 - `src/api/discord_bot.py`, `src/api/discord_format.py`: Bot と Embed 整形/メトリクス
@@ -215,22 +245,28 @@ flowchart TD
 ---
 
 ## 開発/運用
+
 - テスト
+
 ```bash
 pytest -q
 ```
+
 - Lint/整形/型
+
 ```bash
 ruff --fix .
 black --line-length=100 .
 mypy
 ```
-  - pre-commit 導入済（`pre-commit install` 推奨）
+
+- pre-commit 導入済（`pre-commit install` 推奨）
 - CI: `/.github/workflows/ci.yml`
 
 ---
 
 ## トラブルシューティング
+
 - Discord チャンネルが見つからない: `.env` の `DISCORD_CHANNEL_ID_N` を数値文字列で設定
 - Google API key が読めない: `.env` のパス/内容を確認。`GOOGLE_API_KEY` を設定
 - 大きい PDF の処理: 50MB超は Ghostscript（`gs`）圧縮を試行（未導入時は警告してスキップ）
@@ -240,6 +276,7 @@ mypy
 ---
 
 ## セキュリティ
+
 - `.env` はコミット禁止（APIキーは絶対に公開しない）
 - ログ/CSV に機微情報を含めない
 - 外部API例はダミートークンを使用
@@ -247,6 +284,7 @@ mypy
 ---
 
 ## 参考リンク
+
 - ar5iv: [ar5iv](https://ar5iv.org/)
 - BeautifulSoup: [BeautifulSoup Docs](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
 - lxml: [lxml](https://lxml.de/)
