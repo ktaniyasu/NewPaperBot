@@ -1,28 +1,28 @@
 import asyncio
 import datetime
+import hashlib
 import os  # tmpfs 判定用
 import shutil  # gs の存在確認
 import subprocess  # Ghostscript 呼び出し用
 import tempfile
-import hashlib
 from pathlib import Path
 from typing import Any, Optional
 
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 from ..ingestion.chunking import splitText
+from ..ingestion.html_reader import extractTextByArxivId
 from ..ingestion.pdf_reader import extract as extract_pdf_text
 from ..ingestion.summarizer import combine
-from ..ingestion.html_reader import extractTextByArxivId
-from ..llm.providers import ProviderFactory
 from ..models.paper import AnalysisResult, Paper
 from ..rag.embedding import EmbeddingModel
 from ..rag.vector_store import FaissVectorStore
 from ..schemas.paper_analysis import PaperAnalysisSchema
 from ..utils.config import settings
-from ..utils.http import downloadToFile
 from ..utils.json_utils import parseJsonFromText
 from ..utils.logger import log
+from ..utils.rate_limit import AsyncSlidingWindowRateLimiter
+from .providers import ProviderFactory
 
 
 class PaperAnalyzer:
@@ -37,6 +37,14 @@ class PaperAnalyzer:
         self.MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
         # LLM 同時実行制御（フェーズ3）
         self._llm_sem = asyncio.Semaphore(settings.LLM_CONCURRENCY)
+        self._minute_limiter = AsyncSlidingWindowRateLimiter(
+            settings.LLM_RATE_LIMIT_PER_MINUTE,
+            60.0,
+        )
+        self._day_limiter = AsyncSlidingWindowRateLimiter(
+            settings.LLM_RATE_LIMIT_PER_DAY,
+            86_400.0,
+        )
 
     async def _call_with_retry(self, func, *args, **kwargs):
         """tenacity による簡易リトライ（指数バックオフ）"""
@@ -45,10 +53,15 @@ class PaperAnalyzer:
                 stop=stop_after_attempt(3),
                 wait=wait_exponential(multiplier=1, min=1, max=8),
                 # 非再試行系（コンテキスト超過/認証系）は即時中断
-                retry=retry_if_exception(lambda e: not self._is_non_retryable_error(e)),
+                retry=retry_if_exception(
+                    lambda e: not self._is_non_retryable_error(e)
+                    and not isinstance(e, asyncio.CancelledError)
+                ),
                 reraise=True,
             ):
                 with attempt:
+                    await self._day_limiter.acquire()
+                    await self._minute_limiter.acquire()
                     return await func(*args, **kwargs)
 
     def _is_context_overflow_error(self, e: Exception) -> bool:
@@ -630,7 +643,7 @@ class PaperAnalyzer:
                 log.warning(f"Chunk inference failed: {str(ce)}")
         if not partials:
             return {}
-        return combine(partials, {}) if len(partials) > 1 else partials[0]
+        return combine(partials) if len(partials) > 1 else partials[0]
 
     async def _analyze_via_text_pipeline_from_text(self, text: str, prompt: str) -> dict[str, Any]:
         """テキストを受け取り、(単発 or チャンク/RAG) 推論を行う。"""
@@ -746,12 +759,4 @@ class PaperAnalyzer:
                 log.warning(f"Chunk inference failed: {str(ce)}")
         if not partials:
             return {}
-        return combine(partials, {}) if len(partials) > 1 else partials[0]
-
-    async def _translate_text(self, text: str) -> str:
-        """LLMで英文を日本語訳する"""
-        try:
-            return await self.provider.translate(text)
-        except Exception as e:
-            log.error(f"Error translating text: {str(e)}")
-            return "翻訳エラー発生"
+        return combine(partials) if len(partials) > 1 else partials[0]

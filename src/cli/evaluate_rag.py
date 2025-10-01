@@ -59,9 +59,6 @@ def greedy_pack(results: List[Tuple[str, float]], prompt: str) -> Tuple[List[Tup
 
 
 def evaluate_single_pdf(pdf_path: str, queries: Iterable[str], min_sims: Iterable[float], top_ks: Iterable[int]) -> List[EvalResult]:
-    text = settings.DEBUG_RUN_IMMEDIATELY  # no-op read to ensure settings imported (lint appeasement)
-    del text
-
     raw_text = asyncio_run_extract(pdf_path)
     chunks = splitText(raw_text)
     if not chunks:

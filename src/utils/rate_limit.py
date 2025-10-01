@@ -1,7 +1,9 @@
 import asyncio
-import time
 import contextlib
+import time
+from collections import deque
 from contextlib import AbstractAsyncContextManager
+from typing import Deque
 
 
 class AsyncRateLimiter(AbstractAsyncContextManager):
@@ -49,3 +51,64 @@ class AsyncRateLimiter(AbstractAsyncContextManager):
         with contextlib.suppress(ValueError):
             # 二重解放等の安全ガード（通常発生しない）
             self._sem.release()
+
+
+class RateLimitError(RuntimeError):
+    """明示的なレート制限超過を表す例外"""
+
+    pass
+
+
+class AsyncSlidingWindowRateLimiter(AbstractAsyncContextManager):
+    """
+    任意の期間内の呼び出し回数を制限するスライディングウィンドウ型のレートリミッタ。
+
+    max_calls が 0 以下の場合は無効化される。
+    raise_on_exceed が True の場合、上限到達時に RateLimitError を送出する。
+    """
+
+    def __init__(
+        self,
+        max_calls: int,
+        period_seconds: float,
+        *,
+        raise_on_exceed: bool = False,
+    ) -> None:
+        self.max_calls = int(max_calls)
+        self.period_seconds = float(period_seconds)
+        self.raise_on_exceed = raise_on_exceed
+        self._timestamps: Deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def __aenter__(self):  # type: ignore[override]
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):  # type: ignore[override]
+        return False
+
+    async def acquire(self) -> None:
+        if self.max_calls <= 0 or self.period_seconds <= 0:
+            return
+
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                # 期間外の呼び出しを除去
+                cutoff = now - self.period_seconds
+                while self._timestamps and self._timestamps[0] <= cutoff:
+                    self._timestamps.popleft()
+
+                if len(self._timestamps) < self.max_calls:
+                    self._timestamps.append(now)
+                    return
+
+                wait_time = self.period_seconds - (now - self._timestamps[0])
+                if wait_time <= 0:
+                    continue
+                if self.raise_on_exceed:
+                    raise RateLimitError(
+                        f"Rate limit exceeded: {self.max_calls} calls per {self.period_seconds} seconds"
+                    )
+
+            await asyncio.sleep(wait_time)

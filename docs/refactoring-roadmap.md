@@ -98,7 +98,7 @@ else:
     text = await pdfReader.extract(pdfPath)
     chunks = chunker.split(text)
     partials = [await provider.generateStructuredFromText(prompt, c, schema_dict) for c in chunks]
-    result = reducer.combine(partials, schema_dict)
+    result = reducer.combine(partials)
 ```
 
 #### モデル検出と自動選択

@@ -49,9 +49,6 @@ class Settings(BaseSettings):
     RAG_INDEX_PERSIST: bool = True
     RAG_INDEX_DIR: Path = Path("cache/faiss")
 
-    # Database Settings
-    DATABASE_URL: str = "sqlite:///data/arxiv_papers.db"
-
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: Path = Path("logs/arxiv_analyzer.log")
@@ -72,12 +69,18 @@ class Settings(BaseSettings):
     LLM_STRICT_JSON: bool = True
     LLM_USE_TOOLS: bool = True
     LLM_CONCURRENCY: int = 3
+    LLM_RATE_LIMIT_PER_MINUTE: int = 10
+    LLM_RATE_LIMIT_PER_DAY: int = 1000
 
     # HTTP (PDF ダウンロード等) の共通設定
     HTTP_REQUEST_TIMEOUT: int = 60
     HTTP_RETRY_ATTEMPTS: int = 3
     HTTP_QPS: float = 4.0
     HTTP_CONCURRENCY: int = 4
+
+    # Pipeline concurrency settings
+    PIPELINE_CATEGORY_CONCURRENCY: int = 6
+    PIPELINE_PAPER_CONCURRENCY: int = 2
 
     # Debug Settings
     DEBUG_RUN_IMMEDIATELY: bool = False

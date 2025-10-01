@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 
 
-def combine(partials: List[Dict[str, Any]], schema: Dict[str, Any]) -> Dict[str, Any]:
+def combine(partials: List[Dict[str, Any]]) -> Dict[str, Any]:
     """単純な統合: 文字列フィールドは結合、配列はユニーク結合。
     後続で LLM での Reduce を導入予定。
     """
